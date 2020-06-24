@@ -1,6 +1,7 @@
 #tests with output readable by latex
 library("xtable")
 library(dplyr)
+library(corncob)
 
 e <- betadisper(clr_euc_all, clr_phylo_meta$fraction, type = c("median","centroid"))
 ee <- permutest(e)
@@ -644,6 +645,127 @@ alg <- intakePA  %>% tax_glom("Genus")
 alg
 alg0 <- microbiome::transform(alg, "compositional")
 alg0
-#View(as.data.frame(intakePA.rel@tax_table))
 algy <- core(alg0, detection = 0.1/100, prevalence = 75/100)
 algy
+rf <- refseq(algy)
+writeXStringSet(rf, file = "tanksupor.fa", format = "fasta")
+
+#import into command line and build a tree
+# FastTreeMP -gtr -nt new > fl_tank2.tre
+# reroot tree (script source)
+# perl /local/cluster/mueller/scripts/Genomics/stat/reroot.pl -midpoint < fl_tank2.tre > fl_tank2.reroot.2.tre
+# save locally
+#import
+fl.tank.tre <- read.tree(file = "fltank.tre")
+#put into the phylo object
+phy_tree(algy) <- fl.tank.tre
+fl_tank_phy <- ggtree(algy) + 
+  geom_tippoint(size=1) 
+melt_simple_fl <- psmelt(algy)  %>% select(OTU, val=Abundance)
+#View(melt_simple_fl)
+fl_tank_phy
+
+fl_tank_dens <- facet_plot(fl_tank_phy+xlim_tree(.65), panel="Abundance", data=melt_simple_fl, 
+           geom_density_ridges, mapping = aes(x=val,group=label, 
+                                   fill=Family), 
+           color='grey80', lwd=.3) +
+  scale_fill_manual(values = c( "slateblue", "forestgreen", "gold4", "gold2", 
+    "peru", "orangered", "maroon3",
+    "palevioletred", "yellow", "purple3", "dodgerblue",
+    "skyblue3", "darkslategray3", "darkturquoise"))   +  
+  geom_tiplab(aes ( label = Genus), size = 3) +
+  theme(legend.text = element_text(size=7)) +theme(axis.text.x = element_text(vjust = 0)) 
+  
+  
+  pruned_samples_phylo1
+intake <- pruned_samples_phylo1 %>%
+  phyloseq::subset_samples(Type %in% c( "Tank")) 
+intake
+intakePA <- intake %>% 
+  phyloseq::subset_samples(fraction %in% "GFF")
+alg <- intakePA  %>% tax_glom("Genus")
+alg
+alg0 <- microbiome::transform(alg, "compositional")
+alg0
+#View(as.data.frame(alg0@tax_table))
+algp <- core(alg0, detection = 0.1/100, prevalence = 75/100)
+algp
+parf <- refseq(algp)
+writeXStringSet(parf , file = "tankpa.fa", format = "fasta")
+
+#import into command line and build a tree
+# FastTreeMP -gtr -nt new > pa_tank2.tre
+# reroot tree (script source)
+# perl /local/cluster/mueller/scripts/Genomics/stat/reroot.pl -midpoint < pa_tank2.tre > pa_tank2.reroot.2.tre
+# save locally
+#import
+pa.tank.tre <- read.tree(file = "patnks.tree")
+#put into the phylo object
+phy_tree(algp) <- pa.tank.tre
+pa_tank_phy <- ggtree(algp) + 
+  geom_tippoint(size=1) 
+pa_tank_phy
+melt_simple_pa <- psmelt(algp)  %>% select(OTU, val=Abundance)
+#View(melt_simple_pa)
+pa_tank_dens <- facet_plot(pa_tank_phy+xlim_tree(.65), panel="Abundance", data=melt_simple_pa, 
+                           geom_density_ridges, mapping = aes(x=val,group=label, 
+                                                              fill=Family), 
+                           color='grey80', lwd=.3) +
+  scale_fill_manual(values = c( "gold4", "burlywood2", 
+                                "peru", "plum2" ,
+                                "orangered", "palevioletred", 
+                                "purple3", "dodgerblue",
+                                "skyblue3", "darkslategray3", 
+                                "darkturquoise"))   +  
+  geom_tiplab(aes ( label = Genus), size = 3) +
+  theme(legend.text = element_text(size=7)) +theme(axis.text.x = element_text(vjust = 0)) 
+  
+ggarrange(fl_tank_dens,
+          pa_tank_dens, ncol = 1, nrow = 2,
+                   common.legend = FALSE, legend = "right",
+                   labels = c("A", "B"), 
+          font.label = list(size = 9) , hjust = -0.2)
+
+#corncob differential abundance 
+freeliving_phylo <- fl_phy3
+freeliving_phylo
+freeliving_phylo2 <- freeliving_phylo %>% 
+  phyloseq::subset_samples(Type %in% c("Tank", "Intake")) %>% tax_glom(taxrank = "Family")   
+freeliving_phylo2
+#remove rare taxa not seen more than 4 times in at least 10% of the samples
+freeliving_phylo3 <- filter_taxa(freeliving_phylo2, function(x) sum(x > 4) > (0.1*length(x)), TRUE)
+freeliving_phylo3
+set.seed(100)
+corncob1<- differentialTest(formula = ~Type,
+                                 phi.formula = ~Type,
+                                 formula_null= ~1,
+                                 phi.formula_null = ~Type, #controlling for the effect of Site on dispersion
+                                 test="Wald", boot=FALSE, 
+                                 data=freeliving_phylo3,
+                                 fdr_cutoff=0.05)
+plot(corncob1)
+
+#supor vs gff, tanks
+all_phylo <- pruned_samples_phylo1
+all_phylo2 <- all_phylo %>% 
+  phyloseq::subset_samples(Type %in% c("Tank", "Intake"))   %>% 
+       tax_glom(taxrank = "Family")   
+all_phylo2
+#remove rare taxa not seen more than 4 times in at least 10% of the samples
+all_phylo3 <- filter_taxa(all_phylo2, function(x) sum(x > 4) > (0.1*length(x)), TRUE)
+all_phylo3
+set.seed(100)
+corncob2<- differentialTest(formula = ~fraction,
+                            phi.formula = ~fraction,
+                            formula_null= ~1,
+                            phi.formula_null = ~fraction, #controlling for the effect of Site on dispersion
+                            test="Wald", boot=FALSE, 
+                            data=all_phylo3,
+                            fdr_cutoff=0.05)
+plot(corncob2)
+
+
+
+
+
+
