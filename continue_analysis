@@ -1,0 +1,376 @@
+#tests with output readable by latex
+library("xtable")
+
+e <- betadisper(clr_euc_all, clr_phylo_meta$fraction, type = c("median","centroid"))
+ee <- permutest(e)
+print(xtable(ee$tab, format.args = list(big.mark = " ", decimal.mark = ",")))
+v <- betadisper(clr_euc_all, clr_phylo_meta$sample_type, type = c("median","centroid"))
+m <- permutest(v)
+print(xtable(m$tab, format.args = list(big.mark = " ", decimal.mark = ",")))
+mm <- permutest(v, pairwise = TRUE)
+mm
+goo <- as.data.frame(mm$pairwise)
+print(xtable(goo, format.args = list(big.mark = " ", decimal.mark = ",")))
+boxplot(v)
+
+im <- adonis2(clr_euc_all ~ fraction, data = clr_phylo_meta)
+im
+print(xtable(im, format.args = list(big.mark = " ", decimal.mark = ",")))
+
+eek <- adonis2(clr_euc_all ~ sample_type, data = clr_phylo_meta)
+eek
+print(xtable(eek, format.args = list(big.mark = " ", decimal.mark = ",")))
+
+int1 <- adonis2(clr_euc_all ~ fraction*sample_type, data = clr_phylo_meta)
+int1
+print(xtable(int1, format.args = list(big.mark = " ", decimal.mark = ",")))
+
+l <- pairwise.adonis(clr_euc_all , factors = clr_phylo_meta$sample_type)
+l
+ly <- l
+print(xtable(ly, format.args = list(big.mark = " ", decimal.mark = ",")))
+
+#plot PCA and ordinate. RDA is equivalent to PCA
+#PCA via phyloseq
+OK <- ordinate(clr_phylo, "RDA", "euclidean")
+OK
+#Plot scree plot
+plot_scree(OK) + geom_bar(stat="identity", fill = "blue") +
+  labs(x = "\nAxis", y = "Proportion of Variance\n")
+#Examine eigenvalues and % prop. variance explained
+head(OK$CA$eig)   
+sapply(OK$CA$eig[1:5], function(x) x / sum(OK$CA$eig)) 
+#Scale axes and plot ordination
+clr1 <- OK$CA$eig[1] / sum(OK$CA$eig)
+clr2 <- OK$CA$eig[2] / sum(OK$CA$eig)
+
+?scores
+pl <- as.data.frame(scores(OK, display = "sites"))
+pll <- as.data.frame(pl)
+View(pll)
+
+cbbPalette2 <- c("#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7") # sample_type
+hanPalette3 <- c("chartreuse4", "goldenrod1", "deepskyblue4", "deepskyblue",  "thistle4")
+
+
+gg.all <- plot_ordination(clr_phylo, OK, "samples", color="sample_type", shape = "fraction", axes = c(1, 2)) +
+  coord_fixed(clr2 / clr1) +
+  geom_point(color = "black", size=2.6) +  
+  geom_point(size = 2, alpha = 0.95) +
+  scale_color_manual(values = hanPalette3) +
+  theme_classic() + labs(fill = "Type") +
+  labs(title="All Samples") + 
+  theme(legend.text =element_text(size=6)) +
+  theme(legend.title = element_text(size=6)) +
+  theme(axis.title.x = element_text(size = 8)) +
+  theme(axis.title.y = element_text(size = 8)) +
+  theme(axis.text.x = element_text(size =6)) +
+  theme(axis.text.y = element_text(size =6)) + theme(plot.title = element_text(hjust = 0.5))
+gg.all
+View(pruned_samples_phylo1@sam_data)
+
+#Analyze FL samples
+fl_phy <- pruned_samples_phylo1 %>% 
+  phyloseq::subset_samples(fraction %in% "Supor 200") 
+fl_phy
+fl_phy2 <- fl_phy %>% 
+  phyloseq::subset_samples(sample_type %in% c("Larvae Tank", "Treated Intake", "Raw Intake", "Algae", 'Waste')) 
+fl_phy2
+class(fl_phy2@sam_data$julian)
+
+
+#Remove the ASVs with no presence
+fl_phy3 <- prune_taxa(taxa_sums(fl_phy2) > 1, fl_phy2)
+fl_phy3
+
+#transform
+fl_phylo <- microbiome::transform(fl_phy3, transform = "clr", target = "sample")
+fl_phylo
+fl_phylo_otu <- as.data.frame(fl_phylo@otu_table)
+dim(fl_phylo_otu)
+#View(fl_phylo_otu)
+#get metadata table
+meta <- as.matrix(fl_phylo@sam_data, stringsAsFactors=T)
+meta <- as.data.frame(meta, stringsAsFactors=T)
+meta$pairedReads <- as.numeric(as.character(meta$pairedReads))
+meta$Reduced <- as.numeric(as.character(meta$Reduced))
+meta$julian <- as.numeric(as.character(meta$julian))
+dim(meta)
+#View(meta)
+#View(pruned_samples_meta)
+sapply(meta, class)
+
+#distance
+t_fl_phylo_otu <- t(fl_phylo_otu)
+euc_fl <- vegdist(t_fl_phylo_otu, method = "euclidean")
+#tests
+v <- betadisper(euc_fl, meta$sample_type, type = c("median","centroid"))
+hey <- permutest(v, pairwise = TRUE)
+hey
+goo <- as.data.frame(hey$pairwise)
+print(xtable(goo, format.args = list(big.mark = " ", decimal.mark = ",")))
+print(xtable(hey$tab, format.args = list(big.mark = " ", decimal.mark = ",")))
+
+#adonis
+adonis2(euc_fl ~ sample_type, data = meta)
+a2 <- adonis2(euc_fl ~ sample_type, data = meta)
+class(a2)
+a2
+print(xtable(a2, format.args = list(big.mark = " ", decimal.mark = ",")))
+pairwise.adonis(euc_fl , factors = meta$sample_type, p.adjust.m = "bonferroni")
+a3 <- pairwise.adonis(euc_fl , factors = meta$sample_type)
+a3
+print(xtable(a3, format.args = list(big.mark = " ", decimal.mark = ",")))
+
+#Now plot
+#PCA via phyloseq
+FLPCA <- ordinate(fl_phylo, "RDA", "euclidean")
+FLPCA
+#Plot scree plot
+plot_scree(FLPCA) + geom_bar(stat="identity", fill = "blue") +
+  labs(x = "\nAxis", y = "Proportion of Variance\n")
+#Examine eigenvalues and % prop. variance explained
+head(FLPCA$CA$eig)   
+sapply(FLPCA$CA$eig[1:5], function(x) x / sum(FLPCA$CA$eig)) 
+#Scale axes and plot ordination
+clr1 <- FLPCA$CA$eig[1] / sum(FLPCA$CA$eig)
+clr2 <- FLPCA$CA$eig[2] / sum(FLPCA$CA$eig)
+pl <- as.data.frame(scores(FLPCA, display = "sites"))
+pll <- as.data.frame(pl)
+#View(pll)
+
+hanPalette4 <- c( "chartreuse4" , "goldenrod1", "royalblue", "lightskyblue",  "thistle4")
+
+
+p3 <- plot_ordination(fl_phylo, FLPCA, "samples", color="Type", axes = c(1, 2)) +
+  coord_fixed(clr2 / clr1) +
+  geom_point(color = "black", size=2.6) +  theme_classic()+
+  geom_point(size = 2, alpha = 0.95) +
+  scale_color_manual(values = hanPalette2) +
+  labs(fill = "Day") +
+  labs(title="Free-living fraction") + 
+  theme(legend.text =element_text(size=6)) +
+  theme(legend.title = element_text(size=6)) +
+  theme(axis.title.x = element_text(size = 8)) +
+  theme(axis.title.y = element_text(size = 8)) +
+  theme(axis.text.x = element_text(size =6)) +
+  theme(axis.text.y = element_text(size =6)) + theme(plot.title = element_text(hjust = 0.5)) 
+p3 
+gg.fl <- p3
+gg.all <- p9
+
+### particle attached
+pruned_samples_phylo1
+
+han <- pruned_samples_phylo1 %>%
+  phyloseq::subset_samples(fraction %in% c( "GFF"))
+class(han)
+han
+pan <- han %>%
+  phyloseq::subset_samples(Type %in% c( "Tank", "Intake", "Algae",
+                                          "Waste"))
+pan
+
+#Remove the ASVs with no presence
+pan1 <- prune_taxa(taxa_sums(pan) > 1, pan)
+pan1
+
+#now transforma and shit
+paaw <- microbiome::transform(pan1, transform = "clr", target = "sample")
+p_a <- as.data.frame(paaw@otu_table)
+dim(p_a)
+#View(paa.o)
+#get metadata table
+metal <- as.matrix(paaw@sam_data, stringsAsFactors=T)
+metal <- as.data.frame(metal, stringsAsFactors=T)
+metal$pairedReads <- as.numeric(as.character(metal$pairedReads))
+metal$Reduced <- as.numeric(as.character(metal$Reduced))
+metal$julian <- as.numeric(as.character(metal$julian))
+dim(metal)
+#View(metal)
+#View(pruned_samples_meta)
+sapply(metal, class)
+
+#distance
+paa.o.t <- t(p_a)
+euc_pa <- vegdist(paa.o.t , method = "euclidean")
+length(euc_pa)
+
+
+#tests and plots pa
+vy <- betadisper(euc_pa, metal$sample_type, type = c("median","centroid"))
+vvy <- permutest(vy, pairwise = TRUE)
+vvy
+gov <- as.data.frame(vvy$pairwise)
+dff <- data.frame(Distance_to_centroid=vy$distances,Group=vy$group)
+print(xtable(gov, format.args = list(big.mark = " ", decimal.mark = ",")))
+print(xtable(vvy$tab, format.args = list(big.mark = " ", decimal.mark = ",")))
+View(dff)
+p<- ggplot(data=dff,aes(x=Group,y=Distance_to_centroid,fill=Group))
+p + geom_boxplot() + scale_fill_manual(values = hanPalette3) +
+     theme(axis.text.x=element_text(angle = -90, hjust = 0,vjust=0.5)) +
+ theme_classic() +  labs(y = "Distance to Centroid") + coord_flip() +geom_jitter(alpha = 0.5)
+disp_pa <- p + geom_boxplot(outlier.alpha = 0) + scale_fill_manual(values = hanPalette3) +
+  theme(axis.text.x=element_text(angle = -90, hjust = 0,vjust=0.5)) +
+  theme_classic() +  labs(y = "Distance to Centroid", x = "Sample Location") + coord_flip() +geom_jitter(alpha = 0.5)
+df <- data.frame(Distance_to_centroid=v$distances,Group=v$group)
+groups <- v$group
+fl_disp <- ggplot(data=df,aes(x=Group,y=Distance_to_centroid,fill=groups))
+fl_dispw <- fl_disp  + geom_boxplot(outlier.alpha = 0) + scale_fill_manual(values = hanPalette3) +
+  theme(axis.text.x=element_text(angle = -90, hjust = 0,vjust=0.5)) +
+  theme_classic() +  labs(y = "Distance to Centroid",  x = "Sample Location") + coord_flip() +geom_jitter(alpha = 0.5)
+disp_pa
+fl_dispw #made the fl plot too
+#now put the plots side by side
+dispersions = ggarrange(fl_dispw,
+                        disp_pa,
+                    ncol = 2, nrow = 1,
+                   common.legend = TRUE, legend = "right",
+                   labels = c("A", "B", "C", "D", "E", "F"), font.label = list(size = 9) )
+dispersions
+
+
+#PCA via phyloseq
+HI <- ordinate(paaw, "RDA", "euclidean")
+HI
+#Plot scree plot
+plot_scree(HI) + geom_bar(stat="identity", fill = "blue") +
+  labs(x = "\nAxis", y = "Proportion of Variance\n")
+#Examine eigenvalues and % prop. variance explained
+head(HI$CA$eig)   
+sapply(HI$CA$eig[1:5], function(x) x / sum(HI$CA$eig)) 
+#Scale axes and plot ordination
+clr1 <- HI$CA$eig[1] / sum(HI$CA$eig)
+clr2 <- HI$CA$eig[2] / sum(HI$CA$eig)
+pl <- as.data.frame(scores(HI, display = "sites"))
+pll <- as.data.frame(pl)
+#View(pll)
+p6 <- plot_ordination(paaw, HI, "samples", color="Type", axes = c(1, 2)) +
+  coord_fixed(clr2 / clr1) +  
+  geom_point(color = "black", size=2.6) +  
+  geom_point(size = 2, alpha = 0.95) +
+  scale_color_manual(values = hanPalette2) +
+  theme_classic() + labs(fill = "Day") +
+  labs(title="Particle-Attached fraction") + 
+  theme(legend.text =element_text(size=6)) +
+  theme(legend.title = element_text(size=6)) +
+  theme(axis.title.x = element_text(size = 8)) +
+  theme(axis.title.y = element_text(size = 8)) + 
+  theme(axis.text.x = element_text(size =6))  +
+  theme(axis.text.y = element_text(size =6)) + theme(plot.title = element_text(hjust = 0.5)) 
+p6 
+gg.pa <- p6
+
+### Days
+#first PA
+pruned_samples_phylo1
+phy2 <- pruned_samples_phylo1 %>%
+  phyloseq::subset_samples(sample_type %in% c( "Larvae Tank")) 
+phy3 <- phy2 %>%
+  phyloseq::subset_samples(fraction %in% c( "GFF"))
+phy <- phy3%>%
+  phyloseq::subset_samples(julian %in% c("28", "30", "32", "36", "38", "43", "45", "47" , "49", "53", "56"))
+phy
+#Remove the ASVs with no presence
+phyw <- prune_taxa(taxa_sums(phy) > 1, phy)
+phyw
+#511 ASVs
+#now transforma and shit
+paa <-  microbiome::transform(phyw, transform = "clr", target = "sample")
+p_a <- as.data.frame(paa@otu_table)
+dim(p_a)
+
+forjul <- paa
+paa
+OK <- ordinate(paa, "RDA", "euclidean")
+OK
+#Plot scree plot
+plot_scree(OK) + geom_bar(stat="identity", fill = "blue") +
+  labs(x = "\nAxis", y = "Proportion of Variance\n")
+#Examine eigenvalues and % prop. variance explained
+head(OK$CA$eig)   
+sapply(OK$CA$eig[1:5], function(x) x / sum(OK$CA$eig)) 
+#Scale axes and plot ordination
+clr1 <- OK$CA$eig[1] / sum(OK$CA$eig)
+clr2 <- OK$CA$eig[2] / sum(OK$CA$eig)
+pl <- as.data.frame(scores(OK, display = "sites"))
+pll <- as.data.frame(pl)
+
+forjul@sam_data$julian <- as.numeric(forjul@sam_data$julian)
+paa.jul <- plot_ordination(forjul, OK, "samples", color="julian", axes = c(1, 2)) +
+  coord_fixed(clr2 / clr1) +
+  geom_point(color = "black", size=2.6) +  
+  geom_point(size = 2, alpha = 0.95) +
+  scale_color_gradient(low = "red", high = "black")  +
+  theme_classic() + labs(fill = "julian") +
+  labs(title="PA Tanks") + 
+  theme(legend.text =element_text(size=6)) +
+  theme(legend.title = element_text(size=6)) +
+  theme(axis.title.x = element_text(size = 8)) +
+  theme(axis.title.y = element_text(size = 8)) +
+  theme(axis.text.x = element_text(size =6)) +
+  theme(axis.text.y = element_text(size =6)) + theme(plot.title = element_text(hjust = 0.5))
+paa.jul
+
+#now FL
+pruned_samples_phylo1
+phy2 <- pruned_samples_phylo1 %>%
+  phyloseq::subset_samples(sample_type %in% c( "Larvae Tank")) 
+phy3 <- phy2 %>%
+  phyloseq::subset_samples(fraction %in% c( "Supor 200"))
+phy <- phy3%>%
+  phyloseq::subset_samples(julian %in% c("28", "30", "32", "36", "38", "43", "45", "47" , "49", "53", "56"))
+phy
+#Remove the ASVs with no presence
+phyw <- prune_taxa(taxa_sums(phy) > 1, phy)
+phyw
+#511 ASVs
+#now transforma and shit
+paa <-  microbiome::transform(phyw, transform = "clr", target = "sample")
+p_a <- as.data.frame(paa@otu_table)
+dim(p_a)
+
+forjul <- paa
+paa
+OK <- ordinate(paa, "RDA", "euclidean")
+OK
+#Plot scree plot
+plot_scree(OK) + geom_bar(stat="identity", fill = "blue") +
+  labs(x = "\nAxis", y = "Proportion of Variance\n")
+#Examine eigenvalues and % prop. variance explained
+head(OK$CA$eig)   
+sapply(OK$CA$eig[1:5], function(x) x / sum(OK$CA$eig)) 
+#Scale axes and plot ordination
+clr1 <- OK$CA$eig[1] / sum(OK$CA$eig)
+clr2 <- OK$CA$eig[2] / sum(OK$CA$eig)
+pl <- as.data.frame(scores(OK, display = "sites"))
+pll <- as.data.frame(pl)
+
+forjul@sam_data$julian <- as.numeric(forjul@sam_data$julian)
+fl.jul <- plot_ordination(forjul, OK, "samples", color="julian", axes = c(1, 2)) +
+  coord_fixed(clr2 / clr1) +
+  geom_point(color = "black", size=2.6) +  
+  geom_point(size = 2, alpha = 0.95) +
+  scale_color_gradient(low = "red", high = "black")  +
+  theme_classic() + labs(fill = "julian") +
+  labs(title="FL") + 
+  theme(legend.text =element_text(size=6)) +
+  theme(legend.title = element_text(size=6)) +
+  theme(axis.title.x = element_text(size = 8)) +
+  theme(axis.title.y = element_text(size = 8)) +
+  theme(axis.text.x = element_text(size =6)) +
+  theme(axis.text.y = element_text(size =6)) + theme(plot.title = element_text(hjust = 0.5))
+  
+fl.jul
+
+
+figpca = ggarrange(gg.all,
+                   gg.fl,
+                   gg.pa,
+                   fl.jul,paa.jul, ncol = 3, nrow = 2,
+                   common.legend = FALSE, legend = "right",
+                   labels = c("A", "B", "C", "D", "E", "F"), font.label = list(size = 7) )
+figpca
+
+
+
