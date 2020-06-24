@@ -1,5 +1,6 @@
 #tests with output readable by latex
 library("xtable")
+library(dplyr)
 
 e <- betadisper(clr_euc_all, clr_phylo_meta$fraction, type = c("median","centroid"))
 ee <- permutest(e)
@@ -44,7 +45,7 @@ sapply(OK$CA$eig[1:5], function(x) x / sum(OK$CA$eig))
 clr1 <- OK$CA$eig[1] / sum(OK$CA$eig)
 clr2 <- OK$CA$eig[2] / sum(OK$CA$eig)
 
-?scores
+
 pl <- as.data.frame(scores(OK, display = "sites"))
 pll <- as.data.frame(pl)
 View(pll)
@@ -373,4 +374,276 @@ figpca = ggarrange(gg.all,
 figpca
 
 
+### More
+# Alpha diversity
+# rarefy
+#First, Rarefy everything
+#get otu df from pruned samples phylo
+OTUe = as(otu_table(pruned_samples_phylo), "matrix")
+# transpose if necessary
+if(taxa_are_rows(pruned_samples_phylo)){OTUe <- t(OTUe)}
+# Coerce to data.frame
+un = as.data.frame(OTUe)
+#View(OTUee)
+dim(OTUee)
+#View(pruned_samples_phylo@tax_table)
+TAXee = as(tax_table(pruned_samples_phylo), "matrix")
+rarified_pruned_samples_phylo <- rarefy_even_depth(pruned_samples_phylo, sample.size = min(sample_sums(pruned_samples_phylo)),
+                                                   replace = TRUE, trimOTUs = TRUE, verbose = TRUE,  rngseed=42)
+rarified_pruned_samples_phylo
+# Extract abundance matrix from the phyloseq object
+OTU_pruned = as(otu_table(GP), "matrix")
+# transpose if necessary
+if(taxa_are_rows(GP)){OTU_pruned <- t(OTU_pruned)}
+#coerce to data frame
+OTU_pruned.df = as.data.frame(OTU_pruned)
+# Faith's
+pf_all <- pd(OTU_pruned.df, tree, include.root=FALSE)
+View(pf_all)
+View(pruned_samples_meta)
+avs_per_sample <- rowSums(OTU_pruned.df)
+head(avs_per_sample)
+class(pf_all)
 
+div <- alpha(rarified_pruned_samples_phylo, index= "all")
+rare.meta <- meta(rarified_pruned_samples_phylo)
+rare.meta$sam_name <- rownames(rare.meta )
+div$sam_name <- rownames(rare.meta )
+div.df<- merge(div,rare.meta, by = "sam_name")
+
+div.df$Faith <- pf_all$PD
+div.df$SR <-  pf_all$SR
+
+#Returns a dataframe of the PD and species richness (SR)
+div.df$Type <- factor(div.df$Type, levels = c( "Intake",  "Tank", "Algae","Waste"))
+div.df$fraction <- factor(div.df$fraction, levels = c( "Supor 200",  "GFF"))
+
+pie_even <- ggboxplot(div.df, 
+             x = "Type",  facet.by = "fraction",
+             y = "evenness_pielou",
+             fill = "Type", ylab = "Evenness",
+             xlab = FALSE, palette =  c(    "blue3", "goldenrod1", "chartreuse4" , "thistle4"), legend = NULL ) +
+  theme(plot.title = element_text(hjust = 0.5)) +
+ theme( axis.text.x = element_blank())
+
+
+faith1 <- ggboxplot(div.df, 
+             x = "Type",  facet.by = "fraction",
+             y = "Faith",
+             fill = "Type", ylab = "Faith's Phylogenetic Diversity",
+             xlab = FALSE, palette =  c( "blue3", "goldenrod1", "chartreuse4" , "thistle4"), legend = NULL ) +
+  theme(plot.title = element_text(hjust = 0.5)) +
+ theme( axis.text.x = element_blank())
+
+faith1 
+pie_even
+ggarrange(faith1,pie_even , common.legend =  TRUE, legend = "right", ncol = 1, nrow = 2,
+                   labels = c("A", "B", "C", "D", "E", "F"), font.label = list(size = 9) )
+
+#stats for alpha diversity
+sup1 <- div.df  %>% filter(fraction == "Supor 200")
+gff1 <- div.df  %>% filter(fraction == "GFF")
+#example of how to get a summary
+group_by(sup1, Type) %>%
+  dplyr::summarise(
+    count = n(),
+    mean = mean(Faith, na.rm = TRUE),
+    sd = sd(Faith, na.rm = TRUE),
+    median = median(Faith, na.rm = TRUE),
+    IQR = IQR(Faith, na.rm = TRUE)
+  )
+ #test evenness
+sup.pie <- kruskal.test(evenness_pielou ~ Type, data = sup1)
+sup.pie
+pw.sup.pie <- pairwise.wilcox.test(sup1$evenness_pielou, sup1$Type,
+                                 p.adjust.method = "BH")
+pw.sup.pie
+sup.f <- kruskal.test(Faith ~ Type, data = sup1)
+sup.f
+pw.sup.f<- pairwise.wilcox.test(sup1$Faith, sup1$Type,
+                                 p.adjust.method = "BH")
+pw.sup.f
+
+group_by(gff1, Type) %>%
+  dplyr::summarise(
+    count = n(),
+    mean = mean(Faith, na.rm = TRUE),
+    sd = sd(Faith, na.rm = TRUE),
+    median = median(Faith, na.rm = TRUE),
+    IQR = IQR(Faith, na.rm = TRUE)
+  )
+#test evenness
+gff1.pie <- kruskal.test(evenness_pielou ~ Type, data = gff1)
+gff1.pie
+pw.sgff1.pie <- pairwise.wilcox.test(gff1$evenness_pielou, gff1$Type,
+                                 p.adjust.method = "BH")
+pw.gff1.pie
+gff1.f <- kruskal.test(Faith ~ Type, data = gff1)
+gff1.f
+pw.gff1.f<- pairwise.wilcox.test(gff1$Faith, gff1$Type,
+                                 p.adjust.method = "BH")
+pw.gff1.f
+
+
+#Next RA graphs
+pruned_samples_phylo
+physeq2 = filter_taxa(pruned_samples_phylo, function(x) mean(x) > 0.1, TRUE)
+physeq2
+physeq3 = transform_sample_counts(physeq2, function(x) x / sum(x) )
+#interesting # stomach <- subset_samples(physeq3, Sample_type=="Stomach")
+df <- psmelt(physeq3)
+glom <- tax_glom(physeq3, taxrank = 'Family')
+glom 
+data <- psmelt(glom) # create dataframe from phyloseq object
+data$Family <- as.character(data$Family) #convert to character
+p <- ggplot(subset(data, Abundance > 0.05), aes(x=Type, y=Abundance, fill=Family))
+p + geom_bar(aes(), stat="identity", position="fill") + facet_grid("fraction")+
+  scale_fill_manual(values = c("gray20",  "darkgrey", "darkorchid",  
+                               "darkblue","lightskyblue3", "khaki2", "darkseagreen",
+                               "darkgreen", "royalblue1" , "ivory4", 
+                               "darkgoldenrod1",  "lightskyblue2",
+                                 "palevioletred1", "midnightblue", "red4",
+                               "yellow2", "royalblue4", "darksalmon", 
+                                 "steelblue1", "rosybrown4", "lightskyblue",  "red1", 
+                               "darkgoldenrod", "lightblue4", "peru", 
+                                "deeppink4", "peachpuff3", 
+                               "lightsalmon",    "aquamarine4", "steelblue",
+                               "lightpink",  "darkolivegreen1", "goldenrod",
+                               "navajowhite", 
+                               "deeppink", "black")) +
+  theme(legend.position="bottom")  +
+  guides(fill = guide_legend(keywidth = 0.3, , keyheight =.70, ncol=1)) +
+  theme_classic() +
+  theme(legend.text =element_text(size=6)) +
+  theme(legend.title =element_text(size=7)) +
+  theme(axis.title.x = element_text(size = 8)) +
+  theme(axis.title.y = element_text(size = 8)) +
+  theme(axis.text.x = element_text(size =6)) +
+  theme(axis.text.y = element_text(size =6)) +
+  theme(strip.text.x = element_text(size =5)) +
+  ylab("Relative abundance")
+  
+  ### now class
+glom <- tax_glom(physeq3, taxrank = 'Class')
+glom 
+data <- psmelt(glom) # create dataframe from phyloseq object
+data$Class <- as.character(data$Class) #convert to character
+p <- ggplot(subset(data, Abundance > 0.02), aes(x=Type, y=Abundance, fill=Class))
+p + geom_bar(aes(), stat="identity", position="fill") + facet_grid("fraction")+
+  scale_fill_manual(values = c("gray20", "goldenrod",  "lightpink", 
+                               "black", "lightskyblue3", 
+                               "darkgreen", "rosybrown4", "royalblue1" ,"darkorchid", "ivory4", 
+                               "darkgoldenrod1",  "lightskyblue2",
+                                 "midnightblue", "red4",
+                               "yellow2", "royalblue4", "darksalmon", 
+                                 "steelblue1", "lightskyblue",  "red1", 
+                               "darkgoldenrod", "lightblue4", "peru", 
+                                "deeppink4", "gold1", 
+                               "lightsalmon",    "aquamarine4", "steelblue",
+                                "darkolivegreen1")) +
+  theme(legend.position="bottom")  +
+  guides(fill = guide_legend(keywidth = 0.3, , keyheight =.70, ncol=1)) +
+  theme_classic() +
+  theme(legend.text =element_text(size=6)) +
+  theme(legend.title =element_text(size=7)) +
+  theme(axis.title.x = element_text(size = 8)) +
+  theme(axis.title.y = element_text(size = 8)) +
+  theme(axis.text.x = element_text(size =6)) +
+  theme(axis.text.y = element_text(size =6)) +
+  theme(strip.text.x = element_text(size =5)) +
+  ylab("Relative abundance")
+
+  ### now phylum
+glom <- tax_glom(physeq3, taxrank = 'Phylum')
+glom 
+data <- psmelt(glom) # create dataframe from phyloseq object
+data$Phylum <- as.character(data$Phylum) #convert to character
+p <- ggplot(subset(data, Abundance > 0.05), aes(x=Type, y=Abundance, fill=Phylum))
+p + geom_bar(aes(), stat="identity", position="fill") + facet_grid("fraction")+
+  scale_fill_manual(values = c(   "cadetblue4",   "bisque3", "midnightblue",
+                           "steelblue",  "lightsalmon",  "gold1", 
+                                 "aquamarine4", "aliceblue", "gray14",
+                                "darkolivegreen1")) +
+  theme(legend.position="bottom")  +
+  guides(fill = guide_legend(keywidth = 0.3, , keyheight =.70, ncol=1)) +
+  theme_classic() +
+  theme(legend.text =element_text(size=6)) +
+  theme(legend.title =element_text(size=7)) +
+  theme(axis.title.x = element_text(size = 8)) +
+  theme(axis.title.y = element_text(size = 8)) +
+  theme(axis.text.x = element_text(size =6)) +
+  theme(axis.text.y = element_text(size =6)) +
+  theme(strip.text.x = element_text(size =5)) +
+  ylab("Relative abundance")
+
+  ### now order
+glom <- tax_glom(physeq3, taxrank = 'Order')
+glom 
+data <- psmelt(glom) # create dataframe from phyloseq object
+data$Order <- as.character(data$Order) #convert to character
+p <- ggplot(subset(data, Abundance > 0.05), aes(x=Type, y=Abundance, fill=Order))
+p + geom_bar(aes(), stat="identity", position="fill") + facet_grid("fraction")+
+  scale_fill_manual(values = c(  "darkgreen",  "bisque3", "midnightblue",
+                           "steelblue", "darksalmon",    "gold1",  "royalblue4", "cadetblue4", 
+                                 "steelblue1", "black", "chartreuse",  "navy", "yellow2", 
+                                 "darkgoldenrod4", "gray14",
+                                "darkolivegreen1", "magenta2",   "rosybrown4", "royalblue1" ,"darkorchid", "ivory4", 
+                                "chocolate1", "indianred3", "blue",  "azure2", "red1" )) +
+  theme(legend.position="bottom")  +
+  guides(fill = guide_legend(keywidth = 0.3, , keyheight =.70, ncol=1)) +
+  theme_classic() +
+  theme(legend.text =element_text(size=6)) +
+  theme(legend.title =element_text(size=7)) +
+  theme(axis.title.x = element_text(size = 8)) +
+  theme(axis.title.y = element_text(size = 8)) +
+  theme(axis.text.x = element_text(size =6)) +
+  theme(axis.text.y = element_text(size =6)) +
+  theme(strip.text.x = element_text(size =5)) +
+  ylab("Relative abundance")
+  
+  #now genus
+glom <- tax_glom(physeq3, taxrank = 'Genus')
+glom 
+data <- psmelt(glom) # create dataframe from phyloseq object
+data$Genus <- as.character(data$Genus) #convert to character
+p <- ggplot(subset(data, Abundance > 0.05), aes(x=Type, y=Abundance, fill=Genus))
+p + geom_bar(aes(), stat="identity", position="fill") + facet_grid("fraction")+
+  scale_fill_manual(values = c( "gray2" , "orange", "darkgreen",  "mediumblue",   "gray20" ,"bisque3", 
+                                "midnightblue", "chartreuse4","steelblue1",
+                                "steelblue", "orange2",  "darksalmon",    "gold1",  "royalblue4", "cadetblue4", 
+                                "royalblue2", "gray14","azure4",  "mistyrose",
+                                 "black", "chartreuse",    "navy", 
+                                "darkgoldenrod4", 
+                                "darkolivegreen1", "magenta2",   "rosybrown4", "royalblue1" ,"darkorchid", 
+                                "chocolate1", "indianred3", "blue",  "red1" , "aquamarine4", "steelblue3",
+                                "lightpink",  "darkolivegreen", "goldenrod2", "mediumturquoise", 
+                                "navajowhite" , "palevioletred1",  "red4",
+                                 "red2", "navajowhite4", 
+                                  "lightslateblue", "blue2",   "lightpink2", "gray29" ) ) +
+  theme(legend.position="bottom")  +
+  guides(fill = guide_legend(keywidth = 0.3, , keyheight =.70, ncol=1)) +
+  theme_classic() +
+  theme(legend.text =element_text(size=6)) +
+  theme(legend.title =element_text(size=7)) +
+  theme(axis.title.x = element_text(size = 8)) +
+  theme(axis.title.y = element_text(size = 8)) +
+  theme(axis.text.x = element_text(size =6)) +
+  theme(axis.text.y = element_text(size =6)) +
+  theme(strip.text.x = element_text(size =5)) +
+  ylab("Relative abundance")
+
+
+#Core Microbes
+pruned_samples_phylo1
+intake <- pruned_samples_phylo1 %>%
+  phyloseq::subset_samples(Type %in% c( "Intake")) 
+intake
+intakePA <- intake %>% 
+  phyloseq::subset_samples(fraction %in% "Supor 200")
+alg <- intakePA  %>% tax_glom("Genus")
+alg
+alg0 <- microbiome::transform(alg, "compositional")
+alg0
+#View(as.data.frame(intakePA.rel@tax_table))
+algy <- core(alg0, detection = 0.1/100, prevalence = 75/100)
+algy
