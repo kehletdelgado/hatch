@@ -765,7 +765,62 @@ corncob2<- differentialTest(formula = ~fraction,
 plot(corncob2)
 
 
+#### Abundances stacked bar chards
 
+pruned_samples_phylo1
+w <- pruned_samples_phylo %>%
+  phyloseq::subset_samples(Type %in% c("Tank"))
+w
+physeq2 = filter_taxa(w, function(x) mean(x) > 0.0001, TRUE)
+physeq2
+physeq3 = transform_sample_counts(physeq2, function(x) x / sum(x) )
+physeq3
+df <- psmelt(physeq3)
+glom <- tax_glom(physeq3, taxrank = 'Family')
+glom # 
+data <- psmelt(glom) # create dataframe from phyloseq object
+data$Family <- as.character(data$Family) #convert to character
+data$julian <- as.numeric(data$julian)
+data$julian <- as.character(data$julian)
+#Then turn it back into a factor with the levels in the correct order
+#data$julian <- factor(data$julian, levels=unique(data$julian))
+View(data)
+datat <- data
+data <- data[order(data$julian),] 
+#simple way to rename phyla with < 1% abundance
+data$Family[data$Abundance < 0.005] <- "< 1% abund."
+h <- ggplot(subset(data, Abundance > 0.01), 
+            aes(x = reorder(GroupID,julian), y=Abundance, fill=Family))
+h + geom_bar(aes(), stat="identity", position="fill") + facet_wrap("fraction", scales = "free")+
+  scale_fill_manual(values = c("yellow2", "lightskyblue", "lightblue4", "peru", "red1" ,
+                               "blue3",   "turquoise", "steelblue1",
+                               "gold",  "black", "darkgreen", 
+                               "skyblue", "steelblue2", "sienna3",  "royalblue4", 
+                               "darkorange1", "darkgrey","lightsalmon", "tan4",
+                               "red","aliceblue" , "slateblue4", "steelblue4",
+                                "deeppink4", 
+                               "darkseagreen", "darkorchid",
+                               "palevioletred1", "dodgerblue",  "plum3", "wheat3", 
+                               "darkblue", "goldenrod1",
+                               "aquamarine4",  "brown3", 
+                               "khaki2", "plum", "skyblue4",
+                               "goldenrod",   "brown1", "lightpink",
+                               "khaki3", "palegreen1",  "tomato4",
+                                 "yellowgreen","aquamarine3", "deeppink","purple","gold3", 
+                               "lightpink2", "darkgoldenrod1", 
+                               "ivory4", 
+                               "white" 
+                               )) +
+  guides(fill = guide_legend(keywidth = 0.3, , keyheight =.70, ncol=1)) +
+  theme_classic()+
+  theme(legend.text =element_text(size=6)) +
+  theme(legend.title =element_text(size=7)) +
+  theme(axis.title.x = element_text(size = 8)) +
+  theme(axis.title.y = element_text(size = 8)) +
+  theme(axis.text.x = element_text(size =6, angle = 90)) +
+  theme(axis.text.y = element_text(size =6)) +
+  theme(strip.text.x = element_text(size =5)) +
+  ylab("Relative abundance")
 
 
 
