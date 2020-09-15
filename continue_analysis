@@ -411,9 +411,9 @@ rarified_pruned_samples_phylo <- rarefy_even_depth(pruned_samples_phylo, sample.
                                                    replace = TRUE, trimOTUs = TRUE, verbose = TRUE,  rngseed=42)
 rarified_pruned_samples_phylo
 # Extract abundance matrix from the phyloseq object
-OTU_pruned = as(otu_table(GP), "matrix")
+OTU_pruned = as(otu_table(rarified_pruned_samples_phylo), "matrix")
 # transpose if necessary
-if(taxa_are_rows(GP)){OTU_pruned <- t(OTU_pruned)}
+if(taxa_are_rows(rarified_pruned_samples_phylo)){OTU_pruned <- t(OTU_pruned)}
 #coerce to data frame
 OTU_pruned.df = as.data.frame(OTU_pruned)
 # Faith's
